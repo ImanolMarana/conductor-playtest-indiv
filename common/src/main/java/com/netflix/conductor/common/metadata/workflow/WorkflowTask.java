@@ -587,64 +587,9 @@ public class WorkflowTask {
             case DO_WHILE:
             case DECISION:
             case SWITCH:
-                for (List<WorkflowTask> workflowTasks : children()) {
-                    Iterator<WorkflowTask> iterator = workflowTasks.iterator();
-                    while (iterator.hasNext()) {
-                        WorkflowTask task = iterator.next();
-                        if (task.getTaskReferenceName().equals(taskReferenceName)) {
-                            break;
-                        }
-                        WorkflowTask nextTask = task.next(taskReferenceName, this);
-                        if (nextTask != null) {
-                            return nextTask;
-                        }
-                        if (task.has(taskReferenceName)) {
-                            break;
-                        }
-                    }
-                    if (iterator.hasNext()) {
-                        return iterator.next();
-                    }
-                }
-                if (taskType == TaskType.DO_WHILE && this.has(taskReferenceName)) {
-                    // come here means this is DO_WHILE task and `taskReferenceName` is the last
-                    // task in
-                    // this DO_WHILE task, because DO_WHILE task need to be executed to decide
-                    // whether to
-                    // schedule next iteration, so we just return the DO_WHILE task, and then ignore
-                    // generating this task again in deciderService.getNextTask()
-                    return this;
-                }
-                break;
+                return handleDecisionSwitchDoWhile(taskReferenceName, parent);
             case FORK_JOIN:
-                boolean found = false;
-                for (List<WorkflowTask> workflowTasks : children()) {
-                    Iterator<WorkflowTask> iterator = workflowTasks.iterator();
-                    while (iterator.hasNext()) {
-                        WorkflowTask task = iterator.next();
-                        if (task.getTaskReferenceName().equals(taskReferenceName)) {
-                            found = true;
-                            break;
-                        }
-                        WorkflowTask nextTask = task.next(taskReferenceName, this);
-                        if (nextTask != null) {
-                            return nextTask;
-                        }
-                        if (task.has(taskReferenceName)) {
-                            break;
-                        }
-                    }
-                    if (iterator.hasNext()) {
-                        return iterator.next();
-                    }
-                    if (found && parent != null) {
-                        return parent.next(
-                                this.taskReferenceName,
-                                parent); // we need to return join task... -- get my sibling from my
-                        // parent..
-                    }
-                }
-                break;
+                return handleForkJoin(taskReferenceName, parent);
             case DYNAMIC:
             case TERMINATE:
             case SIMPLE:
@@ -653,6 +598,67 @@ public class WorkflowTask {
                 break;
         }
         return null;
+    }
+
+    private WorkflowTask handleDecisionSwitchDoWhile(String taskReferenceName, WorkflowTask parent) {
+        for (List<WorkflowTask> workflowTasks : children()) {
+            Iterator<WorkflowTask> iterator = workflowTasks.iterator();
+            while (iterator.hasNext()) {
+                WorkflowTask task = iterator.next();
+                WorkflowTask nextTask = findNextTask(taskReferenceName, task);
+                if (nextTask != null) {
+                    return nextTask;
+                }
+                if (task.has(taskReferenceName)) {
+                    break;
+                }
+            }
+            if (iterator.hasNext()) {
+                return iterator.next();
+            }
+        }
+        if (TaskType.DO_WHILE == TaskType.of(type) && this.has(taskReferenceName)) {
+            return this;
+        }
+        return null;
+    }
+
+    private WorkflowTask handleForkJoin(String taskReferenceName, WorkflowTask parent) {
+        boolean found = false;
+        for (List<WorkflowTask> workflowTasks : children()) {
+            Iterator<WorkflowTask> iterator = workflowTasks.iterator();
+            while (iterator.hasNext()) {
+                WorkflowTask task = iterator.next();
+                if (task.getTaskReferenceName().equals(taskReferenceName)) {
+                    found = true;
+                    break;
+                }
+                WorkflowTask nextTask = findNextTask(taskReferenceName, task);
+                if (nextTask != null) {
+                    return nextTask;
+                }
+                if (task.has(taskReferenceName)) {
+                    break;
+                }
+            }
+            if (iterator.hasNext()) {
+                return iterator.next();
+            }
+            if (found && parent != null) {
+                return parent.next(this.taskReferenceName, parent);
+            }
+        }
+        return null;
+    }
+
+    private WorkflowTask findNextTask(String taskReferenceName, WorkflowTask task) {
+        if (task.getTaskReferenceName().equals(taskReferenceName)) {
+            return task;
+        }
+        return task.next(taskReferenceName, this);
+    }
+
+//Refactoring end
     }
 
     public boolean has(String taskReferenceName) {
